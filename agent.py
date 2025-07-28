@@ -29,14 +29,22 @@ class RouteResponseCS(BaseModel):
 # Setup for Customer Service Supervisor
 members_cs = ["Query_Agent", "Resolution_Agent", "Escalation_Agent"]
 system_prompt_cs = f"You are a customer service supervisor managing agents: {', '.join(members_cs)}. "
-system_prompt_cs += "Route the customer query to the appropriate agent based on the query type."
+# edited by assistant: Enhanced routing logic with clear agent roles and termination conditions
+system_prompt_cs += "ROUTING RULES: "
+system_prompt_cs += "- Query_Agent: For information lookup, research, and answering questions "
+system_prompt_cs += "- Resolution_Agent: For technical solutions and problem-solving "
+system_prompt_cs += "- Escalation_Agent: For complex issues requiring human intervention "
+system_prompt_cs += "- FINISH: When the customer's question has been fully answered and no further action is needed. "
+system_prompt_cs += "IMPORTANT: After an agent provides a complete answer or solution, choose FINISH to end the conversation."
 
 #create prompt template for the supervisor with correctly formatted options
+# edited by assistant: Added FINISH option to the available choices for proper termination
+options_list = members_cs + ["FINISH"]
 prompt_cs = ChatPromptTemplate.from_messages([
     ("system", system_prompt_cs),
     MessagesPlaceholder(variable_name="messages"),
-    ("system", "Choose the next agent to act from {options}."),
-]).partial(options=str(members_cs))
+    ("system", "Choose the next agent to act from {options}. Choose FINISH if the customer's issue is resolved."),
+]).partial(options=str(options_list))
 
 # Define LLM and Supervisor function
 llm = ChatGroq(model="llama-3.3-70b-versatile", api_key=GROQ_API_KEY)
@@ -53,6 +61,7 @@ def agent_node(state, agent, name):
     }
 
 # Define agents for Customer Service tasks with realistic tools
+# edited by assistant: Removed invalid system_prompt parameter and kept agents simple
 query_agent = create_react_agent(llm, tools=[TavilySearch(api_key=TAVILY_API_KEY, max_results=5)])
 resolution_agent = create_react_agent(llm, tools=[PythonREPLTool()])
 escalation_agent = create_react_agent(llm, tools=[PythonREPLTool()])
@@ -85,11 +94,24 @@ workflow_cs.add_conditional_edges("Supervisor", lambda x:x["next"], conditional_
 workflow_cs.add_edge(START, "Supervisor")
 
 # Compile and test the graph
+# edited by assistant: Added recursion limit to prevent infinite loops
 graph_cs = workflow_cs.compile()
 
 #Example input for testing 
 inputs_cs = {"messages": [HumanMessage(content="Help me reset my password.")]}
 
-for output in graph_cs.stream(inputs_cs):
+# edited by assistant: Added recursion limit in stream config to prevent infinite loops
+for output in graph_cs.stream(inputs_cs, config={"recursion_limit": 10}):
     if "__end__" not in output:
-        print(output)
+        # edited by assistant: Extract and display only the content, not the full response structure
+        for node_name, node_output in output.items():
+            if node_name == "Supervisor":
+                print(f"Routing to: {node_output.get('next', 'Unknown')}")
+            elif "messages" in node_output:
+                # Extract the actual message content
+                messages = node_output["messages"]
+                if messages:
+                    content = messages[-1].content
+                    print(f"{node_name}: {content}")
+            else:
+                print(f"{node_name}: {node_output}")

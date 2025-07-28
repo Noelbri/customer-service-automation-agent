@@ -68,4 +68,3 @@ This file defines the rules that must be followed by any coding assistant or AI 
 
 ---
 
-> 💡 This file defines the editing guardrails. Save it in `.vscode/assistant-rules.md` and ensure your assistant reads it before proposing or applying changes.
